@@ -8,10 +8,13 @@
  * Libsnfile development file (headers and libraries) http://www.mega-nerd.com/libsndfile/ at least version 1.0.25
  *
  * Compile with
- * gcc -g $(pkg-config --cflags --libs portaudio-2.0) -lm -lsndfile libsndfile_port.c -o libsndfile_port
+ * gcc -g $(pkg-config --cflags --libs portaudio-2.0) -lm -lsndfile libsndfile_port.c -ansi -Wall -o libsndfile_port
  *
  * Run with ./libsndfile_port some.wav/.flac/.aiff
  */
+
+#define _XOPEN_SOURCE
+#define _POSIX_C_SOURCE 199309L
 
 #include <math.h>
 #include <stdio.h>
@@ -56,10 +59,6 @@ int main(int argc, char *argv[]) {
     PaStreamParameters outputParameters;
     PaStream *stream;
     PaError retval = 0;
-    int r;
-    int pa_ready = 0;
-    unsigned int a;
-    double amp;
     struct sigaction sa;
 
     /* Open file. Because this is just a example we asume
