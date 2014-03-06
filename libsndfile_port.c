@@ -41,7 +41,7 @@ static int paLibsndfileCb( const void *inputBuffer, void *outputBuffer,
     /* File end if we read -1 */
     if( readcount <= 0 ) {
         printf("File end!\n");
-        return -1;
+        return paComplete;
     }
 
     return paContinue;
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
                  NULL, /* no input */
                  &outputParameters,
                  44100,
-                 256,
+                 4096,
                  paClipOff,      /* we won't output out of range samples so don't bother clipping them */
                  paLibsndfileCb,
                  infile );
@@ -124,8 +124,8 @@ int main(int argc, char *argv[]) {
         goto exit;
     }
 
-    printf("Play maximum 180 seconds.\n");
-    Pa_Sleep( 1000 * 180 );
+    printf("Play maximum 360 seconds.\n");
+    Pa_Sleep( 1000 * 360 );
 
     retval = Pa_StopStream( stream );
 
@@ -146,7 +146,6 @@ exit:
     printf("\nExit and clean\n");
     sf_close(infile);
     Pa_Terminate();
-
 
     return retval;
 }
