@@ -9,10 +9,13 @@
  * Libsnfile development file (headers and libraries) http://www.mega-nerd.com/libsndfile/ at least version 1.0.25
  *
  * Compile with
- * gcc -g $(pkg-config --cflags --libs libpulse) -lm -lsndfile libsndfile_pulse.c -o libsndfile_pulse
+ * gcc -g $(pkg-config --cflags --libs libpulse) -lm -lsndfile libsndfile_pulse.c -std=c99 -Wall -o libsndfile_pulse
  *
  * Run with ./libsndfile_pulse some.wav
  */
+
+#define _XOPEN_SOURCE
+#define _POSIX_C_SOURCE 199309L
 
 #include <math.h>
 #include <stdio.h>
@@ -116,7 +119,9 @@ static void stream_request_cb(pa_stream *s, size_t length, void *userdata) {
     pa_usec_t usec = 0;
     int neg = 0;
     int readcount = 0;
-    SNDFILE *sndfile = (SNDFILE *)userdata;
+    /* In future is this is needed enable
+       SNDFILE *sndfile = (SNDFILE *)userdata;
+     */
 
     /* Just null readed area */
     memset(sampledata, 0x00, length * 4);
@@ -130,7 +135,7 @@ static void stream_request_cb(pa_stream *s, size_t length, void *userdata) {
     pa_stream_get_latency(s, &usec, &neg);
 
     /* Print some statistics */
-    printf("latency %8d us request: %8d readed %8d\r", (int)usec, length, readcount);
+    printf("latency %8d us request: %8ld readed %8d\r", (int)usec, length, readcount);
 
     /* File end if we read -1 */
     if( readcount <= 0 ) {
@@ -176,8 +181,6 @@ int main(int argc, char *argv[]) {
     int r;
     int pa_ready = 0;
     int retval = 0;
-    unsigned int a;
-    double amp;
     struct sigaction sa;
 
     /* Open file. Because this is just a example we asume
@@ -188,7 +191,7 @@ int main(int argc, char *argv[]) {
         return  1 ;
     }
 
-    printf("Openend file: %s [%s]\n", argv[1], infile);
+    printf("Openend file: (%s)\n", argv[1]);
 
     output = fopen("jes.pcm", "w+");
 
