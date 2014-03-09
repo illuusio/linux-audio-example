@@ -57,7 +57,7 @@ static void handler(int sig, siginfo_t *si, void *unused) {
 
 int main(int argc, char *argv[]) {
     PaStreamParameters outputParameters;
-    PaStream *stream;
+    PaStream *stream = NULL;
     PaError retval = 0;
     struct sigaction sa;
 
