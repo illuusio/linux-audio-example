@@ -2,7 +2,7 @@
  * Most of the code is taken from these tutorials
  * http://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/Developer/Clients/Samples/AsyncDeviceList/
  * http://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/Developer/Clients/Samples/AsyncPlayback/
- * And added audio playing with libsndfile (FLAC, WAV, AIFF)
+ * And added audio recording with libsndfile (WAV)
  *
  * You need:
  * Pulseaudio development file (headers and libraries) http://www.freedesktop.org/wiki/Software/PulseAudio/ at least version 3.0
@@ -24,7 +24,7 @@
 #include <sndfile.h>
 
 static int latency = 20000; /* start latency in micro seconds */
-float sampledata[88100 * sizeof(float) * 2];
+const void *sampledata;
 static pa_buffer_attr bufattr;
 static int underflows = 0;
 static pa_sample_spec ss;
@@ -116,28 +116,34 @@ static void stream_request_cb(pa_stream *s, size_t length, void *userdata) {
     pa_usec_t usec = 0;
     int neg = 0;
     int writecount = 0;
+    size_t readed;
     /* In future is this is needed enable
        SNDFILE *sndfile = (SNDFILE *)userdata;
      */
 
-    /* Just null readed area */
-    memset(sampledata, 0x00, length * 4);
-
-    /* Peek from the stream */
-    if (pa_stream_peek(s, (const void **)&sampledata, &length) < 0) {
+    /* idea is like this:
+           1# You peek datas pointer
+           2# Yoy get how much data there is (it should be as much length is
+           3# After you have done what you want you drop package (There is no pointer anymore after drop)
+    */
+    if (pa_stream_peek(s, &sampledata, &readed) < 0) {
         fprintf(stderr, "Reading from device failed!");
         loop = 1;
         return;
     }
 
     /* Read with libsndfile */
-    writecount = sf_write_float(outfile, sampledata, length / 4);
+    writecount = sf_write_float(outfile, sampledata, readed / 4);
+
+    pa_stream_drop(s);
+
+    sampledata = NULL;
 
     /* Measure latency */
     pa_stream_get_latency(s, &usec, &neg);
 
     /* Print some statistics */
-    printf("latency %8d us request: %8ld writed %8d\r", (int)usec, length, writecount);
+    printf("latency %8d us request: %8ld/%8ld readed %8d\r", (int)usec, length, readed, writecount);
 
     pa_stream_drop(s);
 }
@@ -145,7 +151,7 @@ static void stream_request_cb(pa_stream *s, size_t length, void *userdata) {
 /* There is not enough bytes to flow so we call underflow */
 static void stream_underflow_cb(pa_stream *s, void *userdata) {
     /* We increase the latency by 50% if we get 6 underflows and latency is under 2s
-     This is very useful for over the network playback that can't handle low latencies */
+     This is very useful for over the network record that can't handle low latencies */
     printf("underflow\n");
     underflows++;
 
@@ -176,9 +182,14 @@ int main(int argc, char *argv[]) {
     int retval = 0;
     struct sigaction sa;
 
+    /*
+      We use two channels
+      Samplerate is 44100
+      Wave 16 bit output format
+    */
     sfinfo.channels = 2;
     sfinfo.samplerate = 44100;
-    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
 
     /* Open file. Because this is just a example we asume
       What you are doing and give file first argument */
@@ -209,7 +220,7 @@ int main(int argc, char *argv[]) {
     /* Create a mainloop API and connection to the default server */
     pa_ml = pa_mainloop_new();
     pa_mlapi = pa_mainloop_get_api(pa_ml);
-    pa_ctx = pa_context_new(pa_mlapi, "Simple PA test application");
+    pa_ctx = pa_context_new(pa_mlapi, "Simple Pulseaudio record application");
     pa_context_connect(pa_ctx, NULL, 0, NULL);
 
     /* Define what callback is called in state change */
@@ -295,7 +306,7 @@ int main(int argc, char *argv[]) {
     bufattr.prebuf = (uint32_t) - 1;
     bufattr.tlength = pa_usec_to_bytes(latency, &ss);
 
-    /* Connect playback to default output */
+    /* Connect record to default input */
     r = pa_stream_connect_record(recordstream, NULL, &bufattr,
                                  PA_STREAM_INTERPOLATE_TIMING
                                  | PA_STREAM_ADJUST_LATENCY
@@ -309,7 +320,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (r < 0) {
-        printf("pa_stream_connect_playback failed\n");
+        printf("pa_stream_connect_record failed\n");
         retval = -1;
         goto exit;
     }

@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
     /* Create a mainloop API and connection to the default server */
     pa_ml = pa_mainloop_new();
     pa_mlapi = pa_mainloop_get_api(pa_ml);
-    pa_ctx = pa_context_new(pa_mlapi, "Simple PA test application");
+    pa_ctx = pa_context_new(pa_mlapi, "Simple Pulseaudio playback application");
     pa_context_connect(pa_ctx, NULL, 0, NULL);
 
     /* Define what callback is called in state change */
