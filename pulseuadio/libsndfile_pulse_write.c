@@ -23,6 +23,13 @@
 #include <pulse/pulseaudio.h>
 #include <sndfile.h>
 
+typedef struct pulseinfo {
+  char name[512];
+  uint32_t card;
+  pa_sample_spec sample_spec;
+  pa_channel_map channel_map;
+} pulseinfo;
+  
 static int latency = 20000; /* start latency in micro seconds */
 const void *sampledata;
 static pa_buffer_attr bufattr;
@@ -31,6 +38,11 @@ static pa_sample_spec ss;
 SNDFILE *outfile = NULL;
 SF_INFO sfinfo;
 int loop = 0;
+pulseinfo m_SSinkList[1024];
+pulseinfo m_SSourceList[1024];
+int m_iSinkCount = -1;
+int m_iSourceCount = -1;
+
 
 /* When context change state this called */
 void pa_state_cb(pa_context *c, void *userdata) {
@@ -79,22 +91,95 @@ void pa_state_cb(pa_context *c, void *userdata) {
 
 /* List sinks in our system (For playback) */
 void pa_sinklist_cb(pa_context *c, const pa_sink_info *l, int eol, void *userdata) {
+    char l_strSampleSpec[1024];
+    char l_strChannelMap[1024];
+    char l_strFormatInfo[1024];
+    int i = 0;
+    
     if( eol ) {
         return;
     }
 
-    printf("Sink Name: %s ", l->name);
-    printf("Description: %s\n", l->description);
+    m_iSinkCount ++;
+    strncpy((char *)m_SSinkList[m_iSinkCount].name, l->name, strlen(l->name));
+    m_SSinkList[m_iSinkCount].card = l->card;
+    m_SSinkList[m_iSinkCount].channel_map = l->channel_map;
+    m_SSinkList[m_iSinkCount].sample_spec = l->sample_spec;
+    
+    printf("SINK %d--------------------------------------------------------------------------\n", l->card);
+    printf("\tSink Name: '%s'\n\tDriver name: '%s'\n\t", l->name, l->driver);
+    printf("Description: '%s'\n\t",l->description);
+    printf("Latency: '%ld' Configured Latency: '%ld'\n\t", l->latency, l->configured_latency);
+    pa_sample_spec_snprint(l_strSampleSpec, 1024, &l->sample_spec);
+    pa_channel_map_snprint(l_strChannelMap, 1024, &l->channel_map);
+    // printf("Proplist: '%s'\n\t", pa_proplist_to_string(l->proplist));
+    printf("Sample spec: '%s'\n\t", l_strSampleSpec);
+    printf("Channel map: '%s'\n\n\t", l_strChannelMap);
+    if( l->active_port != NULL )
+    {
+       printf("Active Port Name: '%s'\n\tDescription '%s'\n\tPriority: '%d'\n\tAvailable:: '%d'\n", l->active_port->name, l->active_port->description, l->active_port->priority, l->active_port->available);
+    }
+    
+    printf("\nPorts:\n");
+
+    for(i=0; i < l->n_ports; i++) {
+	printf("\t\t%d: Port Name: '%s'\n\t\tDescription '%s'\n\t\tPriority: '%d'\n\t\tAvailable:: '%d'\n", i, l->ports[i]->name, l->ports[i]->description, l->ports[i]->priority, l->ports[i]->available);
+    }
+
+    printf("\nSupported formats:\n");
+
+    for(i=0; i < l->n_formats; i++) {
+        pa_format_info_snprint(l_strFormatInfo, 1024, l->formats[i]);
+	printf("\t\t%d: Supported format: '%s'\n", i, l_strFormatInfo);
+    }
+    printf("\n");
+    
 }
 
 /* List sources in our system (For recording) */
 void pa_sourcelist_cb(pa_context *c, const pa_source_info *l, int eol, void *userdata) {
+    char l_strSampleSpec[1024];
+    char l_strChannelMap[1024];
+    char l_strFormatInfo[1024];
+    int i = 0;
+
     if( eol ) {
         return;
     }
 
-    printf("Source Name: %s ", l->name);
-    printf("Description: %s\n", l->description);
+    m_iSourceCount ++;
+    strncpy((char *)m_SSourceList[m_iSourceCount].name, l->name, strlen(l->name));
+    m_SSourceList[m_iSourceCount].card = l->card;
+    m_SSourceList[m_iSourceCount].channel_map = l->channel_map;
+    m_SSourceList[m_iSourceCount].sample_spec = l->sample_spec;
+    
+    printf("SOURCE %d--------------------------------------------------------------------------\n", l->card);
+    printf("\tSource Name: '%s'\n\tDriver name: '%s'\n\t", l->name, l->driver);
+    printf("Description: '%s'\n\t",l->description);
+    printf("Latency: '%ld' Configured Latency: '%ld'\n\t", l->latency, l->configured_latency);
+    pa_sample_spec_snprint(l_strSampleSpec, 1024, &l->sample_spec);
+    pa_channel_map_snprint(l_strChannelMap, 1024, &l->channel_map);
+    // printf("Proplist: '%s'\n\t", pa_proplist_to_string(l->proplist));
+    printf("Sample spec: '%s'\n\t", l_strSampleSpec);
+    printf("Channel map: '%s'\n\n\t", l_strChannelMap);
+    if( l->active_port != NULL )
+    {
+       printf("Active Port Name: '%s'\n\tDescription '%s'\n\tPriority: '%d'\n\tAvailable:: '%d'\n", l->active_port->name, l->active_port->description, l->active_port->priority, l->active_port->available);
+    }
+
+    printf("\nPorts:\n");
+
+    for(i=0; i < l->n_ports; i++) {
+	printf("\t\t%d: Port Name: '%s'\n\t\tDescription '%s'\n\t\tPriority: '%d'\n\t\tAvailable:: '%d'\n", i, l->ports[i]->name, l->ports[i]->description, l->ports[i]->priority, l->ports[i]->available);
+    }
+
+    printf("\nSupported formats:\n");
+
+    for(i=0; i < l->n_formats; i++) {
+        pa_format_info_snprint(l_strFormatInfo, 1024, l->formats[i]);
+	printf("\t\t%d: Supported format: '%s'\n", i, l_strFormatInfo);
+    }
+    printf("\n");
 }
 
 /* Anything happens call this */
@@ -181,6 +266,7 @@ int main(int argc, char *argv[]) {
     int pa_ready = 0;
     int retval = 0;
     struct sigaction sa;
+    pa_channel_map l_SChannelMap;
 
     /*
       We use two channels
@@ -220,7 +306,11 @@ int main(int argc, char *argv[]) {
     /* Create a mainloop API and connection to the default server */
     pa_ml = pa_mainloop_new();
     pa_mlapi = pa_mainloop_get_api(pa_ml);
+<<<<<<< HEAD
     pa_ctx = pa_context_new(pa_mlapi, "Simple Pulseaudio record application");
+=======
+    pa_ctx = pa_context_new(pa_mlapi, "Simple Pulseaudio test application");
+>>>>>>> add29edb7c46e771947c19fd17ec3f486ca96141
     pa_context_connect(pa_ctx, NULL, 0, NULL);
 
     /* Define what callback is called in state change */
@@ -237,6 +327,12 @@ int main(int argc, char *argv[]) {
         goto exit;
     }
 
+    //for(r = 0; r < 1024; r++) {
+    //  memset( &m_SSourceList[r], 0x00, sizeof(pulseinfo));
+    //  memset( &m_SSinkList[r], 0x00, sizeof(pulseinfo));
+    //}
+    // r = 0;
+    
     /* Request sink infos */
     pa_op = pa_context_get_sink_info_list(pa_ctx, pa_sinklist_cb, NULL);
 
@@ -262,6 +358,19 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    for(r = 0; r < (m_iSinkCount + 1); r++) {
+      char str[512];
+      printf("[%d] Sink name: %s (%s)\n", r, m_SSinkList[r].name, pa_channel_map_snprint(str, 512, &m_SSinkList[r].channel_map));
+    }
+
+    
+    for(r = 0; r < (m_iSourceCount + 1); r++) {
+      char str[512];
+      printf("[%d] Source name: %s (%s)\n", r, m_SSourceList[r].name, pa_channel_map_snprint(str, 512, &m_SSourceList[r].channel_map));
+    }
+    
+    r = 0;
+    
     printf("We have samplerate: %5d and channels %2d\n", sfinfo.samplerate, sfinfo.channels);
 
     if( sfinfo.format & SF_FORMAT_PCM_S8 ) {
@@ -287,7 +396,11 @@ int main(int argc, char *argv[]) {
     ss.channels = sfinfo.channels;
     ss.format = PA_SAMPLE_FLOAT32LE;
 
-    recordstream = pa_stream_new(pa_ctx, "Record", &ss, NULL);
+    l_SChannelMap.channels = 2;
+    l_SChannelMap.map[0] = m_SSourceList[3].channel_map.map[0];
+    l_SChannelMap.map[1] = m_SSourceList[3].channel_map.map[1];
+    
+    recordstream = pa_stream_new(pa_ctx, "Record", &ss, &l_SChannelMap);
 
     if (!recordstream) {
         printf("pa_stream_new failed\n");
@@ -306,8 +419,13 @@ int main(int argc, char *argv[]) {
     bufattr.prebuf = (uint32_t) - 1;
     bufattr.tlength = pa_usec_to_bytes(latency, &ss);
 
+<<<<<<< HEAD
     /* Connect record to default input */
     r = pa_stream_connect_record(recordstream, NULL, &bufattr,
+=======
+    /* Connect playback to default output */
+    r = pa_stream_connect_record(recordstream, m_SSourceList[3].name, &bufattr,
+>>>>>>> add29edb7c46e771947c19fd17ec3f486ca96141
                                  PA_STREAM_INTERPOLATE_TIMING
                                  | PA_STREAM_ADJUST_LATENCY
                                  | PA_STREAM_AUTO_TIMING_UPDATE);
