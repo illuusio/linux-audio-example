@@ -30,7 +30,7 @@
  * Compile with
  * gcc -g $(pkg-config --cflags --libs portaudio-2.0) -lm -lsndfile libsndfile_port_blockrec.c -ansi -Wall -o libsndfile_port_blockrec
  *
- * Run with ./libsndfile_port_read some.[wav/.flac/.aiff] (Warning! Will overwrite without warning!)
+ * Run with ./libsndfile_port_blockrec some.[wav/.flac/.aiff] (Warning! Will overwrite without warning!)
  */
 
 #define _BSD_SOURCE
