@@ -1,0 +1,18 @@
+INCLUDE_DIRECTORIES(${PULSEAUDIO_INCLUDE_DIRS})
+
+ADD_EXECUTABLE(libsndfile_pulse_blockplay libsndfile_pulse_blockplay.c)
+ADD_EXECUTABLE(libsndfile_pulse_blockrec libsndfile_pulse_blockrec.c)
+ADD_EXECUTABLE(libsndfile_pulse_play libsndfile_pulse_play.c)
+ADD_EXECUTABLE(libsndfile_pulse_rec libsndfile_pulse_rec.c)
+
+TARGET_LINK_LIBRARIES(libsndfile_pulse_blockplay ${PULSEAUDIO_LIBRARIES})
+TARGET_LINK_LIBRARIES(libsndfile_pulse_blockplay ${LIBSND_LIBRARIES})
+
+TARGET_LINK_LIBRARIES(libsndfile_pulse_blockrec ${PULSEAUDIO_LIBRARIES})
+TARGET_LINK_LIBRARIES(libsndfile_pulse_blockrec ${LIBSND_LIBRARIES})
+
+TARGET_LINK_LIBRARIES(libsndfile_pulse_play ${PULSEAUDIO_LIBRARIES})
+TARGET_LINK_LIBRARIES(libsndfile_pulse_play ${LIBSND_LIBRARIES})
+
+TARGET_LINK_LIBRARIES(libsndfile_pulse_rec ${PULSEAUDIO_LIBRARIES})
+TARGET_LINK_LIBRARIES(libsndfile_pulse_rec ${LIBSND_LIBRARIES})
