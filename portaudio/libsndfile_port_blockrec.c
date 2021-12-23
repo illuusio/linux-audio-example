@@ -33,8 +33,7 @@
  * Run with ./libsndfile_port_blockrec some.[wav/.flac/.aiff] (Warning! Will overwrite without warning!)
  */
 
-#define _BSD_SOURCE
-#define _XOPEN_SOURCE
+#define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 199309L
 
 #include <math.h>
@@ -49,7 +48,11 @@
 SNDFILE *outfile;
 SF_INFO sfinfo ;
 
-#define PLAY_FRAMES_PER_BUFFER 44100
+// Read one sec
+#define READ_FRAMES_PER_BUFFER 44100
+#define READ_WANTED_HOSTAPI "PulseAudio"
+#define READ_DEVICE_NUM 5
+
 
 /* Handle termination with CTRL-C */
 static void handler(int sig, siginfo_t *si, void *unused) {
@@ -61,7 +64,14 @@ int main(int argc, char *argv[]) {
     long readcount = 0;
     PaStreamParameters inputParameters;
     PaStream *stream = NULL;
-    long sizeonesec = (PLAY_FRAMES_PER_BUFFER * 2) * sizeof(float);
+    const PaHostApiInfo* hostApiInfo = NULL;
+    const PaDeviceInfo* deviceInfo = NULL;
+    PaHostApiIndex hostApiIndex = 0;
+    PaHostApiIndex selectedHostApiIndex = 0;
+    const PaHostApiInfo* selectedHostApiInfo = NULL;
+    PaDeviceIndex deviceIndex = 0;
+    unsigned int hostApiCount = 0;
+    long sizeonesec = (READ_FRAMES_PER_BUFFER * 2) * sizeof(float);
 
     /* Alloc size for one block */
     float *sampleBlock = (float *)malloc(sizeonesec);
@@ -110,7 +120,56 @@ int main(int argc, char *argv[]) {
         goto exit;
     }
 
-    inputParameters.device = Pa_GetDefaultInputDevice(); /* default output device */
+    hostApiCount = Pa_GetHostApiCount();
+
+    printf("Portaudio version %d\n", Pa_GetVersion());
+    printf("There is %d HostAPIs available\n", hostApiCount);
+
+    inputParameters.device = paNoDevice;
+    selectedHostApiIndex = Pa_GetDefaultHostApi();
+    selectedHostApiInfo =  Pa_GetHostApiInfo(hostApiIndex);
+
+    /* Query HostAPIs */
+    for(hostApiIndex = 0; hostApiIndex < hostApiCount; hostApiIndex ++)
+    {
+         hostApiInfo =  Pa_GetHostApiInfo(hostApiIndex);
+         printf(" - %d: Name: %s TypeID: %d", hostApiIndex, hostApiInfo->name, hostApiInfo->type);
+         if(!strcmp(READ_WANTED_HOSTAPI, hostApiInfo->name))
+         {
+             printf(" (This is wanted HostAPI)");
+             selectedHostApiIndex = hostApiIndex;
+             selectedHostApiInfo = hostApiInfo;
+         }
+         putc('\n', stdout);
+    }
+
+    printf("\nDevice name: %s\n", selectedHostApiInfo->name);
+
+    /* Query devices on that HostAPI and */
+    for(i = 0; i < selectedHostApiInfo->deviceCount; i ++)
+    {
+        deviceIndex = Pa_HostApiDeviceIndexToDeviceIndex(selectedHostApiIndex, i);
+        if(deviceIndex == paInvalidDevice)
+        {
+            printf("Too many devices queried\n");
+            break;
+        }
+
+        deviceInfo = Pa_GetDeviceInfo(deviceIndex);
+        printf(" - %d Device Index: %d Name: %s", i, deviceIndex, deviceInfo->name);
+        if(READ_DEVICE_NUM == i)
+        {
+            printf(" (This is wanted device)");
+            inputParameters.device = deviceIndex;
+        }
+        printf("\n       Input: %d (Low: %lf, High: %lf)\n", deviceInfo->maxInputChannels, deviceInfo->defaultLowInputLatency, deviceInfo->defaultHighInputLatency);
+        printf("       Output: %d (Low: %lf, High: %lf)\n\n", deviceInfo->maxOutputChannels, deviceInfo->defaultLowOutputLatency, deviceInfo->defaultHighOutputLatency);
+    }
+
+    if(inputParameters.device == paNoDevice)
+    {
+       inputParameters.device = Pa_GetDefaultInputDevice(); /* default output device */
+    }
 
     if (inputParameters.device == paNoDevice) {
         fprintf(stderr, "Error: No default output device.\n");
@@ -128,13 +187,14 @@ int main(int argc, char *argv[]) {
                  &inputParameters,
                  NULL, /* no output */
                  44100,
-                 PLAY_FRAMES_PER_BUFFER,
+                 READ_FRAMES_PER_BUFFER,
                  paClipOff,      /* we won't output out of range samples so don't bother clipping them */
                  NULL,
                  outfile);
 
     if(retval != paNoError) {
-        printf("Can't open device\n");
+        const char *errorStr = Pa_GetErrorText(retval);
+        printf("Can't open device (%s)\n", errorStr);
         goto exit;
     }
 
@@ -145,7 +205,7 @@ int main(int argc, char *argv[]) {
         goto exit;
     }
 
-    printf("Wire on. Will run one minute.\n");
+    printf("Wire on. Will run 10 secs.\n");
     fflush(stdout);
 
     /* -- Here's the loop where we pass data from input to output -- */
