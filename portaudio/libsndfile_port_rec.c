@@ -1,4 +1,24 @@
 /*
+ * Copyright (c) 2021 Tuukka Pasanen <tuukka.pasanen@ilmi.fi>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
  * Most of the code is taken from these tutorials
  * https://www.assembla.com/code/portaudio/subversion/nodes/1922/portaudio/trunk/examples/paex_sine.c
  * And added audio recording with libsndfile (FLAC, WAV, AIFF)
@@ -26,6 +46,11 @@
 SNDFILE *outfile;
 SF_INFO sfinfo ;
 
+// Read one sec
+#define READ_FRAMES_PER_BUFFER 44100
+#define READ_WANTED_HOSTAPI "PulseAudio"
+#define READ_DEVICE_NUM 5
+
 /* Reques for writing length data */
 static int paLibsndfileCb(const void *inputBuffer, void *outputBuffer,
                           unsigned long framesPerBuffer,
@@ -34,6 +59,8 @@ static int paLibsndfileCb(const void *inputBuffer, void *outputBuffer,
                           void *userData) {
     float *in = (float*)inputBuffer;
     long writecount = 0;
+
+    printf("Get frames Per Buffer: %ld\n", framesPerBuffer);
 
     /* Read with libsndfile */
     writecount = sf_write_float(outfile, in, framesPerBuffer * 2);
@@ -53,8 +80,16 @@ static void handler(int sig, siginfo_t *si, void *unused) {
 }
 
 int main(int argc, char *argv[]) {
+    int i = 0;
     PaStreamParameters inputParameters;
     PaStream *stream;
+    const PaHostApiInfo* hostApiInfo = NULL;
+    const PaDeviceInfo* deviceInfo = NULL;
+    PaHostApiIndex hostApiIndex = 0;
+    PaHostApiIndex selectedHostApiIndex = 0;
+    const PaHostApiInfo* selectedHostApiInfo = NULL;
+    PaDeviceIndex deviceIndex = 0;
+    unsigned int hostApiCount = 0;
     PaError retval = 0;
     struct sigaction sa;
 
@@ -100,7 +135,50 @@ int main(int argc, char *argv[]) {
         goto exit;
     }
 
-    inputParameters.device = Pa_GetDefaultInputDevice(); /* default output device */
+    hostApiCount = Pa_GetHostApiCount();
+
+    printf("Portaudio version %d\n", Pa_GetVersion());
+    printf("There is %d HostAPIs available\n", hostApiCount);
+
+    inputParameters.device = paNoDevice;
+    selectedHostApiIndex = Pa_GetDefaultHostApi();
+    selectedHostApiInfo =  Pa_GetHostApiInfo(hostApiIndex);
+
+    /* Query HostAPIs */
+    for(hostApiIndex = 0; hostApiIndex < hostApiCount; hostApiIndex ++) {
+        hostApiInfo =  Pa_GetHostApiInfo(hostApiIndex);
+        printf(" - %d: Name: %s TypeID: %d", hostApiIndex, hostApiInfo->name, hostApiInfo->type);
+        if(!strcmp(READ_WANTED_HOSTAPI, hostApiInfo->name)) {
+            printf(" (This is wanted HostAPI)");
+            selectedHostApiIndex = hostApiIndex;
+            selectedHostApiInfo = hostApiInfo;
+        }
+        putc('\n', stdout);
+    }
+
+    printf("\nDevice name: %s\n", selectedHostApiInfo->name);
+
+    /* Query devices on that HostAPI and */
+    for(i = 0; i < selectedHostApiInfo->deviceCount; i ++) {
+        deviceIndex = Pa_HostApiDeviceIndexToDeviceIndex(selectedHostApiIndex, i);
+        if(deviceIndex == paInvalidDevice) {
+            printf("Too many devices queried\n");
+            break;
+        }
+
+        deviceInfo = Pa_GetDeviceInfo(deviceIndex);
+        printf(" - %d Device Index: %d Name: %s", i, deviceIndex, deviceInfo->name);
+        if(READ_DEVICE_NUM == i) {
+            printf(" (This is wanted device)");
+            inputParameters.device = deviceIndex;
+        }
+        printf("\n       Input: %d (Low: %lf, High: %lf)\n", deviceInfo->maxInputChannels, deviceInfo->defaultLowInputLatency, deviceInfo->defaultHighInputLatency);
+        printf("       Output: %d (Low: %lf, High: %lf)\n\n", deviceInfo->maxOutputChannels, deviceInfo->defaultLowOutputLatency, deviceInfo->defaultHighOutputLatency);
+    }
+
+    if(inputParameters.device == paNoDevice) {
+        inputParameters.device = Pa_GetDefaultInputDevice(); /* default output device */
+    }
 
     if (inputParameters.device == paNoDevice) {
         fprintf(stderr, "Error: No default output device.\n");
@@ -117,7 +195,7 @@ int main(int argc, char *argv[]) {
                  &inputParameters,
                  NULL, /* no output */
                  44100,
-                 4096,
+                 READ_FRAMES_PER_BUFFER,
                  paClipOff,      /* we won't output out of range samples so don't bother clipping them */
                  paLibsndfileCb,
                  outfile);
@@ -130,12 +208,13 @@ int main(int argc, char *argv[]) {
     retval = Pa_StartStream(stream);
 
     if(retval != paNoError) {
-        fprintf(stderr, "Error: Cant start stream.\n");
+        const char *errorStr = Pa_GetErrorText(retval);
+        printf("Can't open device (%s)\n", errorStr);
         goto exit;
     }
 
-    printf("Record maximum 360 seconds.\n");
-    Pa_Sleep(1000 * 360);
+    printf("Record 20 seconds.\n");
+    Pa_Sleep(20 * 1000);
 
     retval = Pa_StopStream(stream);
 
@@ -161,5 +240,3 @@ exit:
 
     return retval;
 }
-
-
